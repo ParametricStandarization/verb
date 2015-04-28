@@ -84,7 +84,12 @@ function threeRender(){
 
 function addCurveToScene(geom, material){
     material = material || new THREE.LineBasicMaterial({ linewidth: 2, color: 0xdcdcdc});
-    scene.add( new THREE.Line( geom, material ) );
+    
+    object = new THREE.Line( geom, material );
+    
+    scene.add( object );
+    
+    return object;
 }
 
 function addLineToScene(pts, mat){
@@ -103,13 +108,16 @@ function addMeshToScene(mesh, material, wireframe ){
 //                               shininess: 40
 //                             });
 
-    scene.add( new THREE.Mesh( mesh, material ) );
+    object = new THREE.Mesh( mesh, material );
+    scene.add( object );
 
     if (wireframe){
         var material2 = new THREE.MeshBasicMaterial( { color: 0x000000, side: THREE.DoubleSide, wireframe: true } );
         var mesh2 = new THREE.Mesh( mesh, material2 );
         scene.add( mesh2 );
     }
+    
+    return object;
 }
 
 function asVector3(pts){
@@ -133,7 +141,7 @@ function benchmark(func, runs){
 }
 
 function pointsAsGeometry(pts){
-    return asGeometry( asVector3(pts) )
+    return asGeometry( asVector3(pts) );
 }
 
 function addPointsToScene(pts){
@@ -145,3 +153,6 @@ function addPointsToScene(pts){
     scene.add( cloud2 );
 }
 
+function removeFromScene(obj){
+    scene.remove( obj );
+}
