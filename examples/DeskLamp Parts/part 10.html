@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="../../build/js/verb.js"></script>
+	<script src="../js/three.min.js"></script>
+	<script src="../js/verbToThreeConversion.js"></script>
+	<script src="../js/OrbitControls.js"></script>
+	<script src="../js/threeBasic.js"></script>
+	<style> body {  margin: 0; } </style>
+</head>
+<body>
+    
+    <button onclick="removeObject()">testButton</button>
+    <input type="range" name="rectangle size" value="4" min="0" max="10" oninput="scaleRectangle(this.value)">
+    <input type="range" name="rectangle height" value="4" min="0" max="10" oninput="scaleRectangleheight(this.value)">
+    
+<!--    hier een nummer input maken die ervoor zorgt dat de lijn constant veranderd.        -->
+<script>
+	threeSetup();
+               
+        
+        scaleRectangle = function(side){
+            objectSide = parseInt(side);
+            
+            innerpart.rebuild(objectSide, objectHeight);
+        };
+        
+	scaleRectangleheight = function(height){
+            objectHeight = parseInt(height);
+            
+            innerpart.rebuild(objectSide, objectHeight);
+        };
+        
+        //--------------------------------------------lamp parts----------------
+        
+        //object that represents part 10 of parametric standardized desklamp
+        //believe that the height is dependend on the width,
+        //need to ask jesse though
+        function part10(){
+            this.meshes = [];
+            this.objects = [];
+        }
+        
+        part10.prototype.draw = function(){
+            for(var i = 0; i<this.meshes.length; i++){
+                this.objects.push(addMeshToScene(this.meshes[i]));
+            }
+        };
+        
+        part10.prototype.removeFromScene = function(){
+            for(var i = 0; i<this.objects.length; i++){
+                removeFromScene(this.objects[i]);
+            }
+            this.meshes.splice(0,this.meshes.length);
+            this.objects.splice(0,this.objects.length);
+        };
+        
+        part10.prototype.rebuild = function(width, height){
+            this.removeFromScene();
+            this.build(width, height);
+        };
+        
+        part10.prototype.build = function(width, height){
+            this.buildInnerPart(width, height);
+            this.buildOuterPart(width, height);
+            
+            this.draw();
+        };
+        
+        //innerpart is a square with the size of the input
+        part10.prototype.buildInnerPart = function(width, height){
+            var innerRectangle = new Rectangle();
+            innerRectangle.construct(width, width, [0,0,height]);
+            
+            var rectangleToNurbs = new verb.geom.NurbsCurve(innerRectangle.polyLineData);
+            var rectangleToSurface = new verb.geom.NurbsSurface(innerRectangle.surfaceData);
+            
+            var extrusionDirection = verb.core.Vec.mul(-height, innerRectangle.plane.normal);
+            var rectangleToExtrude = new verb.geom.ExtrudedSurface(rectangleToNurbs, extrusionDirection);
+            
+            this.meshes.push(rectangleToSurface.toThreeGeometry(), rectangleToExtrude.toThreeGeometry());
+        }
+        
+        //need to make the side of the object now
+        //offset 2 (in Jesse's drawing apears to be 1.5)
+        //offset circle: 1
+        //hole in the offset circle: 3.5 (seems to be m-size + 0.5)
+        part10.prototype.buildOuterPart = function(width, height){
+            var offsetRectangle = width + 4;
+            var offsetOuterCircle = offsetRectangle + 2;
+            
+            //location of intersection:
+            var arcEnd = (Math.PI*1.5) - Math.asin(((offsetRectangle / 2) - 1) / (offsetOuterCircle / 2));
+            var outerArc = new verb.geom.Arc([offsetRectangle / 2, -1, height * 2], [0,1,0], [0,0,1], offsetOuterCircle / 2, 0, arcEnd);
+            
+            var arcStartPt = outerArc._data.controlPoints[0];
+            var arcEndPt = outerArc._data.controlPoints[outerArc._data.controlPoints.length - 1];
+            
+            var lowerCornerPt1 = [offsetRectangle / 2,-offsetRectangle / 2,0];
+            var lowerCornerPt2 = [offsetRectangle / 2,offsetRectangle / 2,0];
+            
+            //might want to declare an offset rectangle and use points out that
+            //location
+            var offsetRectangleLine1 = new verb.geom.Line([arcEndPt[0],arcEndPt[1],arcEndPt[2]], lowerCornerPt1);
+            var offsetRectangleLine2 = new verb.geom.Line(lowerCornerPt2, arcStartPt);
+            
+            var outerSidesExtrusionDirection = [-offsetRectangle, 0, 0];
+            
+            var extrudeOuterSide1 = new verb.geom.ExtrudedSurface(offsetRectangleLine1, outerSidesExtrusionDirection);
+            var extrudeOuterSide2 = new verb.geom.ExtrudedSurface(offsetRectangleLine2, outerSidesExtrusionDirection);
+            var extrudeOuterSide3 = new verb.geom.ExtrudedSurface(outerArc, outerSidesExtrusionDirection);
+            
+            this.meshes.push(extrudeOuterSide1.toThreeGeometry(), extrudeOuterSide2.toThreeGeometry(), extrudeOuterSide3.toThreeGeometry());  
+        };
+        
+        //--------------------------------------------new geom------------------
+        
+        //to create a rectangle:
+	//origin (center?) width height
+	//create polyline with same end as start
+        //should include directions
+        function Rectangle(){
+            this.polyLineData;
+            this.surfaceData;
+            this.plane = new Plane();
+        };
+        
+        Rectangle.prototype.construct = function(width, height, origin, xaxis, yaxis){
+            origin = origin || [0,0,0];
+            xaxis = xaxis || [1,0,0];
+            yaxis = yaxis || [0,1,0];
+            
+            this.plane.construct(origin,xaxis,yaxis);
+            
+            //for each point you need the plane axis multiplied by
+            //either width or height,
+            //then these need to be added to each other and moved to
+            //the origin point
+            
+            var widthHalf = width/2,
+            heightHalf = height/2;
+            
+            var vecXaxis = verb.core.Vec.mul(widthHalf, this.plane.xaxis),
+            vecYaxis = verb.core.Vec.mul(heightHalf, this.plane.yaxis);
+
+            var pt1 = verb.core.Vec.sub(verb.core.Vec.sub(this.plane.origin, vecXaxis), vecYaxis);
+            var pt2 = verb.core.Vec.sub(verb.core.Vec.add(this.plane.origin, vecXaxis), vecYaxis);
+            var pt3 = verb.core.Vec.add(verb.core.Vec.add(this.plane.origin, vecXaxis), vecYaxis);
+            var pt4 = verb.core.Vec.add(verb.core.Vec.sub(this.plane.origin, vecXaxis), vecYaxis);
+
+            var pts = [pt1, pt2, pt3, pt4, pt1];
+                
+            this.polyLineData = new verb.core.Make.polyline( pts );
+            this.surfaceData = new verb.core.Make.fourPointSurface( pts[0], pts[1], pts[2], pts[3] );
+        }
+        
+        //--------------------------------------------new math------------------
+        
+        //object to use for the placing of the rectangle
+        function Plane(){
+            this.origin;
+            this.normal;
+            this.xaxis;
+            this.yaxis;
+        }
+        
+        Plane.prototype.construct = function(origin, xaxis, yaxis){
+            var axisAngle = verb.core.Vec.angleBetween(xaxis, yaxis);
+            if( axisAngle === 180 || axisAngle === 0){
+                console.log("planeAxis are Parallel");
+                return;
+            }
+            
+            //set origin
+            this.origin = origin;
+            
+            //to set the normal, normalize the axis then do a crossproduct
+            var normXaxis = verb.core.Vec.normalized(xaxis);
+            var normYaxis = verb.core.Vec.normalized(yaxis);
+            
+            var normalAxisCross = verb.core.Vec.cross(normXaxis, normYaxis);
+            this.normal = verb.core.Vec.normalized(normalAxisCross);
+            
+            //set xaxis, is normalized xaxis
+            this.xaxis = normXaxis;
+            
+            //setyaxis, is cross product of normal and xaxiss
+            var yAxisCross = verb.core.Vec.cross(this.normal, normXaxis);
+            this.yaxis = verb.core.Vec.normalized(yAxisCross);
+            
+        };
+        
+        joinCurves = function(curveA, curveB){
+            
+        };
+        
+        //maybe write an init that is launchecd on window.onload
+        var objectSide = 4, objectHeight = 4;
+        
+        var innerpart = new part10();
+        innerpart.build(objectSide, objectHeight);
+        
+	threeRender();
+</script>
+
+</body>
+
+</html>
