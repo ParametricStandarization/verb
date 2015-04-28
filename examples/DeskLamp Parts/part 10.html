@@ -39,11 +39,13 @@
         function part10(){
             this.meshes = [];
             this.objects = [];
+            
+            this.material = new THREE.MeshNormalMaterial( { side: THREE.DoubleSide, wireframe: false, shading: THREE.SmoothShading, transparent: false, opacity: 0.4 } )
         }
         
         part10.prototype.draw = function(){
             for(var i = 0; i<this.meshes.length; i++){
-                this.objects.push(addMeshToScene(this.meshes[i]));
+                this.objects.push(addMeshToScene(this.meshes[i], this.material));
             }
         };
         
@@ -93,16 +95,16 @@
             var arcEnd = (Math.PI*1.5) - Math.asin(((offsetRectangle / 2) - 1) / (offsetOuterCircle / 2));
             var outerArc = new verb.geom.Arc([offsetRectangle / 2, -1, height * 2], [0,1,0], [0,0,1], offsetOuterCircle / 2, 0, arcEnd);
             
-            var arcStartPt = outerArc._data.controlPoints[0];
-            var arcEndPt = outerArc._data.controlPoints[outerArc._data.controlPoints.length - 1];
+            var outerArcStartPt = outerArc._data.controlPoints[0];
+            var outerArcEndPt = outerArc._data.controlPoints[outerArc._data.controlPoints.length - 1];
             
             var lowerCornerPt1 = [offsetRectangle / 2,-offsetRectangle / 2,0];
             var lowerCornerPt2 = [offsetRectangle / 2,offsetRectangle / 2,0];
             
             //might want to declare an offset rectangle and use points out that
             //location
-            var offsetRectangleLine1 = new verb.geom.Line([arcEndPt[0],arcEndPt[1],arcEndPt[2]], lowerCornerPt1);
-            var offsetRectangleLine2 = new verb.geom.Line(lowerCornerPt2, arcStartPt);
+            var offsetRectangleLine1 = new verb.geom.Line([outerArcEndPt[0],outerArcEndPt[1],outerArcEndPt[2]], lowerCornerPt1);
+            var offsetRectangleLine2 = new verb.geom.Line(lowerCornerPt2, outerArcStartPt);
             
             var outerSidesExtrusionDirection = [-offsetRectangle, 0, 0];
             
@@ -110,7 +112,84 @@
             var extrudeOuterSide2 = new verb.geom.ExtrudedSurface(offsetRectangleLine2, outerSidesExtrusionDirection);
             var extrudeOuterSide3 = new verb.geom.ExtrudedSurface(outerArc, outerSidesExtrusionDirection);
             
-            this.meshes.push(extrudeOuterSide1.toThreeGeometry(), extrudeOuterSide2.toThreeGeometry(), extrudeOuterSide3.toThreeGeometry());  
+            this.meshes.push(extrudeOuterSide1.toThreeGeometry(), extrudeOuterSide2.toThreeGeometry(), extrudeOuterSide3.toThreeGeometry());
+            
+            //now to cheat with the circular shape because trimming is not yet
+            //possible
+            //as of here stuff gets ugly, need to clean up big time
+            
+            //can extrude this
+            var innerCircle = new verb.geom.Circle([offsetRectangle / 2, -1, height * 2], [0,1,0], [0,0,1], 1.75);
+            
+            var extrudeInnerCircle = new verb.geom.ExtrudedSurface(innerCircle, outerSidesExtrusionDirection);
+            this.meshes.push(extrudeInnerCircle.toThreeGeometry());
+            
+            var threeGeomOuterArc = outerArc.toThreeGeometry();
+            var threeGeomInnerCircle = innerCircle.toThreeGeometry();
+            
+            var partSidePts = [];
+            
+            partSidePts.push( new THREE.Vector2(lowerCornerPt1[1], lowerCornerPt1[2]),
+            new THREE.Vector2(lowerCornerPt2[1], lowerCornerPt2[2]) );
+            
+            for( var i = 0; i < threeGeomOuterArc.vertices.length; i ++ ){
+                partSidePts.push(new THREE.Vector2 ( threeGeomOuterArc.vertices[i].y, threeGeomOuterArc.vertices[i].z));
+            }
+
+            var partSide = new THREE.Shape( partSidePts );
+
+            var holePts = [];
+            for( var i = 0; i < threeGeomInnerCircle.vertices.length; i ++ ){
+                holePts.push(new THREE.Vector2 ( threeGeomInnerCircle.vertices[i].y, threeGeomInnerCircle.vertices[i].z));
+            }
+
+            var circleHole = new THREE.Path(holePts);
+
+            partSide.holes.push( circleHole );
+            
+            var geometry = new THREE.ShapeGeometry( partSide );
+
+            var mesh1 = new THREE.Mesh( geometry, this.material );
+            var mesh2 = new THREE.Mesh( geometry, this.material );
+            
+            mesh1.rotation.set( Math.PI * 0.5, Math.PI * 0.5, 0 );
+            mesh2.rotation.set( Math.PI * 0.5, Math.PI * 0.5, 0 );
+            
+            mesh1.position.set( offsetRectangle * 0.5, 0, 0 );
+            mesh2.position.set( offsetRectangle * -0.5, 0, 0 );
+            
+            this.objects.push(mesh1);
+            this.objects.push(mesh2);
+            
+            scene.add( mesh1 );
+            scene.add( mesh2 );
+            
+            //onderkant
+            
+            var x = lowerCornerPt1[0],
+                y = -lowerCornerPt1[1];
+        
+            var bottomSquarePts = [new THREE.Vector2(-x, -y), new THREE.Vector2(x, -y),
+                new THREE.Vector2(x, y), new THREE.Vector2(-x, y)];
+        
+            var bottomSquare = new THREE.Shape(bottomSquarePts);
+            
+            var side = width * 0.5;
+            
+            var bottomSquareHolePts = [new THREE.Vector2(-side, -side), new THREE.Vector2(side, -side),
+                new THREE.Vector2(side, side), new THREE.Vector2(-side, side)];
+            
+            var bottomSquareHole = new THREE.Path(bottomSquareHolePts);
+
+            bottomSquare.holes.push( bottomSquareHole );
+            
+            
+            var bottomSquareGeometry = new THREE.ShapeGeometry( bottomSquare );
+            
+            var mesh3 = new THREE.Mesh( bottomSquareGeometry, this.material );
+            
+            this.objects.push(mesh3);
+            scene.add( mesh3 );
         };
         
         //--------------------------------------------new geom------------------
@@ -187,10 +266,6 @@
             //setyaxis, is cross product of normal and xaxiss
             var yAxisCross = verb.core.Vec.cross(this.normal, normXaxis);
             this.yaxis = verb.core.Vec.normalized(yAxisCross);
-            
-        };
-        
-        joinCurves = function(curveA, curveB){
             
         };
         
